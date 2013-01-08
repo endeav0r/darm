@@ -1,0 +1,7 @@
+Darm is an ARM disassembly library released under the WTFPL.
+
+I'm not an ARM expert, nor do I do much work in ARM. I am unsure of the
+accuracy of this library. I am releasing it as I haven't been able to find
+a similarily licensed ARM disassembly library for C.
+
+Darm does not disassemble THUMB instructions.

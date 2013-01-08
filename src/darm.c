@@ -38,7 +38,7 @@ int darm_dis (struct _darm * darm, uint32_t ins)
         darm->A = (ins >> 21) & 0x1;
 
         if (darm->A)
-            darm->op = ARM_MULA;
+            darm->op = ARM_MLA;
         else
             darm->op = ARM_MUL;
 
@@ -318,7 +318,7 @@ char * darm_operand2_str (struct _darm * darm, char * buf, size_t size)
 
 
 #define OPERAND2_BUF_SIZE 32
-char * darm_str (struct _darm * darm)
+char * darm_str (struct _darm * darm, uint32_t pc)
 {
     const char * mnemonic;
     const char * cond;
@@ -343,7 +343,7 @@ char * darm_str (struct _darm * darm)
     case ARM_BIC     : mnemonic = "BIC"; break;
     case ARM_MVN     : mnemonic = "MVN"; break;
     case ARM_MUL     : mnemonic = "MUL"; break;
-    case ARM_MULA    : mnemonic = "MULA"; break;
+    case ARM_MLA     : mnemonic = "MLA"; break;
     case ARM_MULL    : mnemonic = "MULL"; break;
     case ARM_MLAL    : mnemonic = "MLAL"; break;
     case ARM_BX      : mnemonic = "BX"; break;
@@ -398,7 +398,7 @@ char * darm_str (struct _darm * darm)
     case ARM_MOV : {
         char * s = "";
         if (darm->S) s = "S";
-        snprintf(darm->text, 64, "%s%s%s %s,%s",
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s%s %s,%s",
                  mnemonic, cond, s,
                  darm_reg_str[darm->rd],
                  darm_operand2_str(darm, operand2_buf, OPERAND2_BUF_SIZE));
@@ -408,7 +408,7 @@ char * darm_str (struct _darm * darm)
     case ARM_CMN :
     case ARM_TST :
     case ARM_TEQ :
-        snprintf(darm->text, 64, "%s%s %s,%s",
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s %s,%s",
                  mnemonic, cond,
                  darm_reg_str[darm->rn],
                  darm_operand2_str(darm, operand2_buf, OPERAND2_BUF_SIZE));
@@ -426,19 +426,90 @@ char * darm_str (struct _darm * darm)
     case ARM_BIC : {
         char * s = "";
         if (darm->S) s = "S";
-        snprintf(darm->text, 64, "%s%s%s %s,%s,%s",
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s%s %s,%s,%s",
                  mnemonic, cond, s,
                  darm_reg_str[darm->rd],
                  darm_reg_str[darm->rn],
                  darm_operand2_str(darm, operand2_buf, OPERAND2_BUF_SIZE));
         break;
     }
+
     case ARM_BX :
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s %s",
+                 mnemonic, cond, darm_reg_str[darm->rn]);
+        break;
 
     case ARM_B  :
     case ARM_BL :
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s %x",
+                 mnemonic, cond, darm->offset);
+        break;
+
+    case ARM_MRS : {
+        char * psr = "CPSR";
+        if (darm->Ps) psr = "SPSR";
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s %s,%s",
+                 mnemonic, cond, darm_reg_str[darm->rd], psr);
+        break;
+    }
+
+    case ARM_MSR : {
+        char * psr = "CPSR";
+        if (darm->Pd) psr = "SPSR";
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s %s,%s",
+                 mnemonic, cond, psr, darm->rm);
+        break;
+    }
+
+    case ARM_MSR_flg : {
+        char * psrf = "CPSR";
+        if (darm->Pd) psrf = "SPSR";
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s %s,%s",
+                 mnemonic, cond, psrf,
+                 darm_operand2_str(darm, operand2_buf, OPERAND2_BUF_SIZE));
+        break;
+    }
+
+    case ARM_MUL : {
+        char * s = "";
+        if (darm->S) s = "S";
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s%s %s,%s,%s",
+                 mnemonic, cond, s,
+                 darm_reg_str[darm->rd],
+                 darm_reg_str[darm->rm],
+                 darm_reg_str[darm->rs]);
+        break;
+    }
+
+    case ARM_MLA : {
+        char * s = "";
+        if (darm->S) s = "S";
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s%s %s,%s,%s,%s",
+                 mnemonic, cond, s,
+                 darm_reg_str[darm->rd],
+                 darm_reg_str[darm->rm],
+                 darm_reg_str[darm->rs],
+                 darm_reg_str[darm->rn]);
+        break;
+    }
+
+    case ARM_MULL :
+    case ARM_MLAL : {
+        char * sign = "U";
+        if (darm->S) sign = "S";
+        char * s = "";
+        if (darm->S) s = "S";
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s%s%s %s,%s,%s,%s",
+                 sign, mnemonic, cond, s,
+                 darm_reg_str[darm->rdlo],
+                 darm_reg_str[darm->rdhi],
+                 darm_reg_str[darm->rm],
+                 darm_reg_str[darm->rs]);
+        break;
+    }
+
     default :
-        snprintf(darm->text, 64, "%s%s", mnemonic, cond);
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s", mnemonic, cond);
     }
 
 

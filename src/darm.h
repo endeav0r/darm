@@ -41,7 +41,7 @@ enum {
     ARM_MVN,
 
     ARM_MUL,
-    ARM_MULA,
+    ARM_MLA,
     ARM_MULL,
     ARM_MLAL,
 
@@ -86,8 +86,10 @@ enum {
     ARM_UNDEF
 };
 
+#define DARM_TEXT_SIZE 64
+
 struct _darm {
-    char text[64];
+    char text[DARM_TEXT_SIZE];
     int op;
 
     uint8_t cond;
@@ -131,7 +133,7 @@ struct _darm {
     union {
         uint8_t rm; // second operand register
         uint8_t crm;
-        uint8_t imm;
+        uint16_t imm;
     };
 
     union {
@@ -142,6 +144,6 @@ struct _darm {
 
 
 int    darm_dis (struct _darm * darm, uint32_t ins);
-char * darm_str (struct _darm * darm);
+char * darm_str (struct _darm * darm, uint32_t pc);
 
 #endif

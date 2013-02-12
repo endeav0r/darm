@@ -457,7 +457,7 @@ char * darm_str (struct _darm * darm, uint32_t pc)
         char * psr = "CPSR";
         if (darm->Pd) psr = "SPSR";
         snprintf(darm->text, DARM_TEXT_SIZE, "%s%s %s,%s",
-                 mnemonic, cond, psr, darm->rm);
+                 mnemonic, cond, psr, darm_reg_str[darm->rm]);
         break;
     }
 

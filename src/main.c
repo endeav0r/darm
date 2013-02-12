@@ -43,7 +43,7 @@ int main (int argc, char * argv[])
             return -1;
         }
 
-        printf("%04x %08x %s\n", i, ins, darm_str(&darm));
+        printf("%04x %08x %s\n", i, ins, darm_str(&darm, i));
     }
 
     return -1;

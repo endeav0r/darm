@@ -128,9 +128,11 @@ int darm_dis (struct _darm * darm, uint32_t ins)
     }
 
     // Halfword and Signed Data Transfer
-    else if ((ins & 0x0e400f90) == 0x00000090) {
+    else if (    ((ins & 0x0e400f90) == 0x00000090)
+              || ((ins & 0x0e400090) == 0x00400090)) {
         darm->P  = (ins >> 24) & 0x1;
         darm->U  = (ins >> 23) & 0x1;
+        darm->I  = (ins >> 22) & 0x1;
         darm->W  = (ins >> 21) & 0x1;
         darm->L  = (ins >> 20) & 0x1;
         darm->rn = (ins >> 16) & 0xf;
@@ -157,6 +159,8 @@ int darm_dis (struct _darm * darm, uint32_t ins)
             else
                 return -1;
         }
+
+        darm->offset = ((ins >> 4) & 0xf0) | (ins & 0xf);
     }
 
     // Block Data Transfer (LDM, STM)
@@ -316,6 +320,93 @@ char * darm_operand2_str (struct _darm * darm, char * buf, size_t size)
     }
 }
 
+/*
+*   ARM LDR/STR operations support optional increment/decrement, where the
+*   CPU decrements/increments a register, an offset from which being address
+*   where the memory operation takes place.
+*   The P bit determines when the increment/decrement will take place. If P is
+*   set, the inc/dec will take place BEFORE the load/store op. If P is not set,
+*   the inc/dec will take place AFTER.
+*   In the case of pre-indexed (P is set) indexing, we can set the W bit. This
+*   will cause the final value of the pre-indexing operation to be written back
+*   into the base register.
+*   In the case of post-indexed (P is not set) indexing, the W bit should be 0.
+*   If a post-indexed operation, if W is set, it forces non-privileged mode for
+*   the transfer. This is useful for generating user-mode addresses if your
+*   memory is, well, funky MMU stuff I guess.
+*
+*   This table is my understanding of how the flags affect this instruction
+*   
+*   Notes: Immediate-Offset of 0 will not be displayed (IE: [Rn])
+*          If Rn is omitted, it should default to PC (which is 8 bytes
+*              ahead of the current instruction)
+*   |---|---|---|---|-------------------- |
+*   | W | P | I | U | <Address>           |
+*   | 0 | 0 | 0 | 0 | [Rn],-#             | Post Sub Immediate-Offset Write-Back
+*   | 0 | 0 | 0 | 1 | [Rn],#              | Post Add Immediate-Offset Write-Back
+*   | 0 | 0 | 1 | 0 | [Rn],-Rm{,<shift>}  | Post Sub Register-Offset  Write-Back
+*   | 0 | 0 | 1 | 1 | [Rn],Rm{,<shift>}   | Post Add Register-Offset  Write-Back
+*   | 0 | 1 | 0 | 0 | [Rn,-#]             | Pre  Sub Immediate-Offset
+*   | 0 | 1 | 0 | 1 | [Rn,#]              | Pre  Add Immediate-Offset
+*   | 0 | 1 | 1 | 0 | [Rn,-Rm{,<shift>}]  | Pre  Sub Register-Offset
+*   | 0 | 1 | 1 | 1 | [Rn,Rm{,<shift>}]   | Pre  Add Register-Offset
+*   | 1 | 0 | 0 | 0 | [Rn],-#             | Post Sub Immediate-Offset Write-Back User-Addr
+*   | 1 | 0 | 0 | 1 | [Rn],#              | Post Add Immediate-Offset Write-Back User-Addr
+*   | 1 | 0 | 1 | 0 | [Rn],-Rm{,<shift>}  | Post Sub Register-Offset  Write-Back User-Addr
+*   | 1 | 0 | 1 | 1 | [Rn],Rm{,<shift>}   | Post Add Register-Offset  Write-Back User-Addr
+*   | 1 | 1 | 0 | 0 | [Rn,-#]!            | Pre  Sub Immediate-Offset Write-Back
+*   | 1 | 1 | 0 | 1 | [Rn,#]!             | Pre  Add Immediate-Offset Write-Back
+*   | 1 | 1 | 1 | 0 | [Rn,-Rm{,<shift>}]! | Pre  Sub Register-Offset  Write-Back
+*   | 1 | 1 | 1 | 1 | [Rn,Rm{,<shift>}]!  | Pre  Add Register-Offset  Write-Back
+*
+*   Computers are hard :p
+*/
+char * darm_ldr_address_str (struct _darm * darm, char * buf, size_t size)
+{
+    char address[64];
+
+    char * u = "-";
+    if (darm->U) u = "";
+    
+    if (darm->I) { // offset is a register
+        char * type = "";
+        switch ((darm->shift >> 1) & 0x3) {
+        case 0 : type = "LSL"; break;
+        case 1 : type = "LSR"; break;
+        case 2 : type = "SAR"; break;
+        case 3 : type = "ROR"; break;
+        }
+
+        if (darm->shift >> 3) { // shift is applied to Rm
+            snprintf(address, 64, "%s%s,%s#%d",
+                     u,
+                     darm_reg_str[darm->rm],
+                     type,
+                     (darm->shift >> 3) & 0x1f);
+        }
+        else { // no shift applied
+            snprintf(address, 64, "%s%s", u, darm_reg_str[darm->rm]);
+        }
+    }
+    else { // offset is an immediate value
+        snprintf(address, 64, "%s#%d", u, darm->offset);
+    }
+    if (darm->P) { // pre-indexed
+        if ((darm->I == 0) && (darm->offset == 0))
+            snprintf(buf, size, "[%s]",
+                     darm_reg_str[darm->rn]);
+        else
+            snprintf(buf, size, "[%s,%s]!",
+                     darm_reg_str[darm->rn], address);
+    } // post-indexed
+    else {
+        snprintf(buf, size, "[%s],%s",
+                 darm_reg_str[darm->rn], address);
+    }
+
+    return buf;
+}
+
 
 #define OPERAND2_BUF_SIZE 32
 char * darm_str (struct _darm * darm, uint32_t pc)
@@ -445,6 +536,19 @@ char * darm_str (struct _darm * darm, uint32_t pc)
                  mnemonic, cond, darm->offset);
         break;
 
+    case ARM_LDR :
+    case ARM_STR : {
+        char buf[64];
+        char * b = "";
+        if (darm->B) b = "B";
+        char * t = "";
+        if (darm->W & darm->P) t = "T";
+        snprintf(darm->text, DARM_TEXT_SIZE, "%s%s%s%s %s,%s",
+                 mnemonic, cond, b, t, darm_reg_str[darm->rd],
+                 darm_ldr_address_str(darm, buf, 64));
+        break;
+    }
+
     case ARM_MRS : {
         char * psr = "CPSR";
         if (darm->Ps) psr = "SPSR";
@@ -457,7 +561,7 @@ char * darm_str (struct _darm * darm, uint32_t pc)
         char * psr = "CPSR";
         if (darm->Pd) psr = "SPSR";
         snprintf(darm->text, DARM_TEXT_SIZE, "%s%s %s,%s",
-                 mnemonic, cond, psr, darm->rm);
+                 mnemonic, cond, psr, darm_reg_str[darm->rm]);
         break;
     }
 

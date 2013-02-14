@@ -1,5 +1,6 @@
 #include "darm.h"
 
+#include <errno.h>
 #include <inttypes.h>
 
 #include <stdio.h>
@@ -14,14 +15,14 @@ int main (int argc, char * argv[])
     fh = fopen(argv[1], "rb");
     if (fh == NULL) {
         fprintf(stderr, "could not open file %s\n", argv[1]);
-        return -1;
+        return errno;
     }
 
     fseek(fh, 0, SEEK_END);
     filesize = ftell(fh);
     fseek(fh, 0, SEEK_SET);
 
-    printf("filesize: %d\n", filesize);
+    printf("filesize: %d\n", (int) filesize);
 
     buf = (unsigned char *) malloc(filesize);
 
@@ -39,12 +40,11 @@ int main (int argc, char * argv[])
 
         struct _darm darm;
         if (darm_dis(&darm, ins)) {
-            fprintf(stderr, "darm error\n");
-            return -1;
+            printf("%04x %08x <invalid instruction>\n", (unsigned int) i, ins);
+        } else {
+            printf("%04x %08x %s\n", (unsigned int) i, ins, darm_str(&darm, i));
         }
-
-        printf("%04x %08x %s\n", i, ins, darm_str(&darm, i));
     }
 
-    return -1;
+    return 0;
 }
